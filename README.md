@@ -1,13 +1,15 @@
-# Armenian Live Transcriber (walking skeleton)
+# Armenian Live Transcriber
 
-Streams a 16 kHz `.wav` file in 1-second blocks (simulating a live source), splits it into phrases on silence, transcribes Armenian with a local fine-tuned Whisper model, translates to English with a local NLLB model, and prints:
+Listens to two audio sources at once: your microphone (labelled `Me`) and the system audio output, i.e. the other people on a call (labelled `Speaker 1`, `Speaker 2`, ...). Each finished phrase is transcribed in Armenian with a local fine-tuned Whisper model, translated to English with a local NLLB model, and printed in this format (illustrative example, not a measured run):
 
 ```
-[00:00:06] Speaker 1
-HY: ...
-EN: ...
-    (latency 1.84s: asr 1.50s, mt 0.34s)
+[00:01:12] Speaker 1
+HY: Բարև, ինչպե՞ս ես։
+EN: Hi, how are you?
+    (latency 2.4s after end of speech)
 ```
+
+Everything runs locally. Wav files can stand in for either source for testing (see Run). See "Honest status and limitations" below for what has and has not been tested.
 
 ## Setup
 ```bash
