@@ -1,15 +1,20 @@
-"""Local Armenian speech recognition using faster-whisper (CPU, int8)."""
+"""Local Armenian speech recognition: Whisper large-v3-turbo fine-tuned on Armenian."""
 import numpy as np
-from faster_whisper import WhisperModel
+from transformers import pipeline
+
+from device import pick_device
+
+DEFAULT_MODEL = "Chillarmo/whisper-large-v3-turbo-armenian"
 
 
 class Transcriber:
-    def __init__(self, model_size: str = "small"):
-        self.model = WhisperModel(model_size, device="cpu", compute_type="int8")
+    def __init__(self, model_name: str = DEFAULT_MODEL):
+        self.pipe = pipeline("automatic-speech-recognition", model=model_name, device=pick_device())
 
     def transcribe(self, audio: np.ndarray) -> str:
         """Convert a 16 kHz mono float32 array to Armenian text."""
-        segments, _ = self.model.transcribe(
-            audio, language="hy", beam_size=1, vad_filter=True
+        out = self.pipe(
+            {"raw": audio, "sampling_rate": 16_000},
+            generate_kwargs={"language": "armenian", "task": "transcribe"},
         )
-        return " ".join(s.text.strip() for s in segments).strip()
+        return out["text"].strip()

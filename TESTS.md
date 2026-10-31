@@ -31,3 +31,21 @@
 |---|---|---|---|---|---|---|
 | `sample_01.wav` | Բարև, ինչպե՞ս ես։ | Hi, how are you? | | | | |
 | `sample_02.wav` | Լավ եմ, շնորհակալություն։ | I'm fine, thank you. | | | | |
+---
+
+## 4. Colab Model Comparison (2026-10-31, Common Voice hy-AM clips, 8 samples)
+
+| Stage | Model | Result |
+|---|---|---|
+| ASR | faster-whisper tiny | Latin-script gibberish |
+| ASR | faster-whisper small (stock) | Mostly garbled Armenian |
+| ASR | faster-whisper medium (stock) | Partly correct, many word errors |
+| ASR | Chillarmo/whisper-large-v3-turbo-armenian | Readable, mostly correct (chosen) |
+| MT | opus-mt-hy-en | Fluent but often wrong; religious-text bias |
+| MT | NLLB-200-distilled-600M | Much better |
+| MT | NLLB-200-distilled-1.3B | Best of the three (chosen) |
+
+Latency on the target laptop: **not yet measured** with the final models. On a 2009 Core 2 Duo the earlier stock-Whisper runs took ~100-300 s per phrase (far above the 5 s limit).
+
+## 5. Live-capture status (2026-10-31)
+Written, not yet run on hardware: TC-01 (device list), TC-02 (capture), TC-05 (two voices -> Speaker 1/2). Only wiring was checked with stand-in models and wav files: mic file -> `Me`, system file -> `Speaker N`, both sources concurrently.

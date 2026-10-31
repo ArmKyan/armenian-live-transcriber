@@ -1,12 +1,12 @@
 # Armenian Live Transcriber (walking skeleton)
 
-Streams a 16 kHz `.wav` file in 1-second blocks (simulating a live source), splits it into phrases on silence, transcribes Armenian with a local Whisper model, translates to English with a local MT model, and prints:
+Streams a 16 kHz `.wav` file in 1-second blocks (simulating a live source), splits it into phrases on silence, transcribes Armenian with a local fine-tuned Whisper model, translates to English with a local NLLB model, and prints:
 
 ```
 [00:00:06] Speaker 1
 HY: ...
 EN: ...
-    (latency 1.84s)
+    (latency 1.84s: asr 1.50s, mt 0.34s)
 ```
 
 ## Setup
@@ -15,29 +15,50 @@ python -m venv venv
 source venv/bin/activate        # Windows: .\venv\Scripts\Activate.ps1
 pip install -r requirements.txt
 ```
-Models download from Hugging Face on first run (needs internet once; afterwards fully local).
+Models download from Hugging Face on first run (internet needed once; afterwards fully local). Roughly 5 GB in total.
+
+## Audio setup (needed for live use)
+The program needs two input devices: your microphone, and a loopback device that carries what you hear (the other people on the call).
+
+**macOS:** `brew install blackhole-2ch`, open *Audio MIDI Setup*, create a *Multi-Output Device* with your speakers/headphones + *BlackHole 2ch*, and set it as the system output. BlackHole 2ch is then your loopback input.
+
+**Windows:** enable *Stereo Mix* (Sound settings -> Recording -> show disabled devices), or install a virtual cable such as VB-Cable and route the call's output to it. Prefer the plain MME/DirectSound entries in the device list.
+
+**Linux (PulseAudio/PipeWire):** use the "Monitor of ..." input as the loopback device.
 
 ## Run
 ```bash
-python src/main.py --input test_audio.hy.wav          # real-time pacing
-python src/main.py --input test_audio.hy.wav --fast   # no sleeping between blocks
-# options: --asr-model small|medium|...   --mt-model <hf id>
+python src/main.py --list-devices                         # find device indexes
+python src/main.py --mic-device 1 --loopback-device 3     # live
 ```
-Input must be 16 kHz (mono or stereo; stereo is averaged). Other rates fail loudly.
+Testing without hardware (wav files must be 16 kHz):
+```bash
+python src/main.py --input test_audio.hy.wav              # file as system audio
+python src/main.py --mic-input me.wav --input others.wav  # both sources
+# --fast skips real-time pacing, --no-diarize skips speaker model, --speaker-threshold, --silence-rms
+```
+Output: `[HH:MM:SS] Me | Speaker N`, then `HY:` and `EN:` lines and the latency after end of speech. On Windows set `$env:PYTHONUTF8="1"` and use a console font with Armenian glyphs (or redirect to a UTF-8 file).
 
 ## Architecture
-`audio.py` (block streamer) -> `main.py` (energy-based phrase segmentation) -> `transcribe.py` (faster-whisper, CPU int8, `language="hy"`) -> `translate.py` (transformers pipeline) -> terminal. Modules don't import each other; `main.py` wires them.
+```
+mic device ----> capture thread -> Segmenter --\
+                                                +--> queue --> ASR -> MT -> label -> terminal
+loopback device -> capture thread -> Segmenter --/                       (Me / SpeakerTracker)
+```
+`audio.py` sources, `segment.py` energy-based phrase splitting, `transcribe.py` Whisper pipeline, `translate.py` NLLB, `speakers.py` ECAPA speaker matching, `device.py` picks CUDA/MPS/CPU, `main.py` wires them.
 
-## Model choices
-- **ASR: faster-whisper.** Whisper supports Armenian; CTranslate2 int8 on CPU is fast enough for a 5 s budget and runs on any laptop. Size is a flag (`small` default) so WER vs latency can be tuned. Alternatives: wav2vec2 Armenian fine-tunes (less robust, no punctuation), SeamlessM4T (heavy).
-- **Translation: `Helsinki-NLP/opus-mt-hy-en`** (small, CPU-friendly), id configurable. Fallback: `facebook/nllb-200-distilled-600M` (`hye_Armn`). See `DECISIONS.md`.
+## Model choices (measured on 8 Common Voice clips; see `TESTS.md`, `DECISIONS.md`)
+- **ASR: `Chillarmo/whisper-large-v3-turbo-armenian`.** Stock Whisper tiny/small/medium were garbled or error-prone for Armenian; this Armenian fine-tune gave readable, mostly correct text. Alternatives: `whisper-small-armenian-v2` (smaller, higher reported WER), `arampacha/whisper-large-hy`.
+- **Translation: `facebook/nllb-200-distilled-1.3B`.** `opus-mt-hy-en` gave fluent but wrong English with a religious-text bias; NLLB-600M was better, 1.3B best.
 
-## Status & honest limitations
-- **Not yet benchmarked on real audio.** The authoring sandbox could not reach Hugging Face, so only the pipeline logic was tested, with stubbed models. The existence/quality of the default MT model id, Whisper's Armenian accuracy and the <5 s latency are unverified. Run Step 5 on your machine and fill in `TESTS.md`.
-- File streaming only: no microphone or system-audio loopback capture (no `sounddevice` yet).
-- Single hard-coded `Speaker 1` label: no `Me` label, no diarization.
-- Silence segmentation is a fixed RMS threshold; noisy audio may not split. Phrases are capped at 8 s.
-- Latency shown is ASR+MT time after the phrase closes, plus up to 1 s waiting for the silence block.
+## Honest status and limitations
+- **The live parts are written but UNTESTED on real hardware**: device capture (`stream_device`), the loopback setup, speaker identification and the 0.45 speaker threshold were only wiring-tested with stand-in models and wav files. Expect to tune.
+- **Latency under 5 s is not yet demonstrated.** The ASR model is 0.8B parameters and likely needs a GPU or fast modern CPU. A 2009 Core 2 Duo took 100-300 s per phrase with stock Whisper. Latency printed is measured from the end of speech to the printed line and includes the 0.6 s end-of-phrase silence wait.
+- Models were checked by eye on 8 Common Voice clips, not as WER; real calls will be harder.
+- One worker processes phrases in order; if it falls behind, latency grows silently.
+- Speaker labels are per phrase (no mid-phrase changes), rely on a fixed threshold, and fail on overlapping speech.
+- Energy-threshold segmentation, no VAD; Whisper may hallucinate text on noise.
+- No echo handling (out of scope per the brief).
 
 ## Next steps
-Live capture with `sounddevice` for mic + loopback (BlackHole), speaker embeddings for `Speaker N`, VAD instead of RMS, benchmark ASR sizes.
+Measure and tune on the interview laptop, CTranslate2 conversion for speed, a backlog warning, VAD instead of RMS, tune the speaker threshold on real conversations.

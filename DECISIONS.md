@@ -14,38 +14,45 @@
 - **Context**: Need a robust Python library to list and record from arbitrary input and loopback audio devices across macOS/Linux/Windows.
 - **Decision**: Use `sounddevice` combined with `numpy` buffers.
 - **Rationale**: Lightweight, low overhead, C bindings to PortAudio, easy real-time buffer management.
-- **Trade-offs**: Requires external system virtual audio cable setup (e.g., BlackHole on macOS).
+- **Trade-offs**: Requires external system virtual audio cable setup (e.g., BlackHole on macOS). Status 2026-10-31: implemented, UNTESTED on real devices. Blocks are resampled to 16 kHz one at a time, so tiny edge artefacts are possible.
 
 ---
 
 ### ADR-002: Model Selection for Armenian Speech Recognition (ASR)
-- **Date**: 2026-10-21
-- **Context**: Armenian is a low-resource language; must run local inference under strict latency constraints ($<5\text{s}$).
-- **Decision**: `faster-whisper` (CTranslate2, CPU, int8), model size configurable via `--asr-model` (default `small`).
-- **Rationale**: Whisper supports Armenian (`hy`); faster-whisper int8 on CPU is several times faster than reference Whisper, which matters for the 5 s budget. Model size is a flag so WER vs latency can be benchmarked on the target laptop.
-- **Trade-offs**: Whisper's Armenian WER is high, especially for small models. Not benchmarked yet (no model download possible in the authoring sandbox). Fallback candidate: a fine-tuned Armenian Whisper/wav2vec2.
+- **Date**: 2026-10-31
+- **Context**: Armenian is low-resource; must run locally with a 5 s budget.
+- **Decision**: `Chillarmo/whisper-large-v3-turbo-armenian` (Whisper large-v3-turbo fine-tuned on Common Voice 20 Armenian, 0.8B, Apache-2.0), loaded with `transformers` pipeline.
+- **Rationale**: Measured on 8 Common Voice clips in Colab. Stock faster-whisper `small` was mostly garbled; stock `medium` was partly right (e.g. clip 1) with many word errors; `tiny` output Latin gibberish. The turbo fine-tune produced readable, mostly correct Armenian; chosen over `whisper-small-armenian-v2` (reported WER 24.0% vs 15.3% self-reported) after side-by-side comparison. Also considered: `arampacha/whisper-large-hy` (22.4% WER, large-v2, heavier).
+- **Trade-offs**: 0.8B params is heavy. Not measured against the 5 s limit yet on target hardware; the author's card suggests a GPU with 8 GB. Stock Whisper-small on a 2009 Core 2 Duo took 100-300 s per phrase. WERs are self-reported on Common Voice, which our test clips come from, so real conversational accuracy is likely worse. Possible speed-up: convert to CTranslate2 and use faster-whisper.
 
 ---
 
 ### ADR-003: Speaker Diarization Strategy for System Audio
-- **Date**: 2026-10-21
-- **Context**: Differentiate multiple speakers on the incoming system audio channel without external cloud APIs.
-- **Decision**: TBD (Options: PyAnnote audio embeddings vs lightweight cosine similarity on speaker embeddings via SpeechBrain/resemble-enhance).
-- **Rationale**: PyAnnote can be memory heavy; simpler embedding comparison per silence-cut segment may offer lower latency.
-- **Trade-offs**: TBD.
+- **Date**: 2026-10-31
+- **Context**: Tell apart several people on the system-audio channel, locally, with stable labels for the session.
+- **Decision**: Online identification, not full diarization: each finished phrase is embedded with SpeechBrain ECAPA-TDNN (`speechbrain/spkrec-ecapa-voxceleb`, CPU) and matched by cosine similarity to running speaker centroids; below threshold (default 0.45, `--speaker-threshold`) it becomes a new speaker. Phrases under 1 s never create or update a speaker.
+- **Rationale**: Simple, no heavy pyannote pipeline, one embedding per phrase fits the latency budget. Microphone audio is always `Me` and is never embedded.
+- **Trade-offs**: UNTESTED on real voices; the threshold is a guess and needs tuning. Overlapping speech, very short phrases and similar voices will mislabel. One phrase = one speaker (no mid-phrase speaker change).
+
 ---
 
 ### ADR-004: Translation Model (HY -> EN)
 - **Date**: 2026-10-31
 - **Context**: Need local Armenian->English text translation.
-- **Decision**: HuggingFace `transformers` MarianMT-style pipeline, default `Helsinki-NLP/opus-mt-hy-en`, model id configurable via `--mt-model`.
-- **Rationale**: Small, CPU-friendly. Model id is a flag because the default could not be verified from the authoring sandbox (Hugging Face unreachable); `facebook/nllb-200-distilled-600M` (`hye_Armn` -> `eng_Latn`) is the fallback candidate.
-- **Trade-offs**: Quality for Armenian unknown until benchmarked.
+- **Decision**: `facebook/nllb-200-distilled-1.3B` (`hye_Armn` -> `eng_Latn`).
+- **Rationale**: Compared on the same Armenian text from 8 clips. `Helsinki-NLP/opus-mt-hy-en` produced fluent but wrong English with a strong religious-text bias ("Jehovah's Witnesses", repeated phrases). NLLB-600M was clearly better; NLLB-1.3B read best (about 0.5-0.8 s per sentence on a Colab GPU). NLLB-3.3B scores higher still on a public FLORES-200 hye->en leaderboard but was not tested here.
+- **Trade-offs**: Larger and slower than 600M; CPU timing not yet measured. Some errors remain from domain vocabulary and upstream ASR mistakes.
 
 ---
 
-### ADR-005: Scope of first version
+### ADR-005: Scope of first version (superseded)
 - **Date**: 2026-10-31
-- **Context**: Step-by-step guide targets a file-streaming walking skeleton.
-- **Decision**: Simulate live audio from a .wav (1 s blocks); single speaker label. Dual capture, diarization and `Me` labelling deferred.
-- **Trade-offs**: Does not yet meet brief items 1 and 4 (two live sources, speaker identification).
+- **Decision**: Started as a file-streaming walking skeleton. Superseded by ADR-006.
+
+---
+
+### ADR-006: Live two-source pipeline
+- **Date**: 2026-10-31
+- **Decision**: One capture+segmentation thread per source (mic, system); finished phrases go to one queue; the main thread runs ASR, MT and labelling sequentially and prints. Wav files can stand in for either source (`--mic-input`, `--input`).
+- **Rationale**: Capture never blocks on slow models; one worker avoids two big models competing for the CPU/GPU.
+- **Trade-offs**: If processing is slower than speech the queue grows and latency grows with it (no dropping or warning yet). UNTESTED live.
