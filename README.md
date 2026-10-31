@@ -17,7 +17,7 @@ python -m venv venv
 source venv/bin/activate        # Windows: .\venv\Scripts\Activate.ps1
 pip install -r requirements.txt
 ```
-Models download from Hugging Face on first run (internet needed once; afterwards fully local). Roughly 5 GB in total.
+Models download from Hugging Face on first run (internet needed once; afterwards fully local). Roughly 9 GB in total (speech model ~3.2 GB, NLLB ~5.5 GB, speaker model ~0.1 GB).
 
 ## Audio setup (needed for live use)
 The program needs two input devices: your microphone, and a loopback device that carries what you hear (the other people on the call).
