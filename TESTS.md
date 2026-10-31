@@ -47,5 +47,13 @@
 
 Latency on the target laptop: **not yet measured** with the final models. On a 2009 Core 2 Duo the earlier stock-Whisper runs took ~100-300 s per phrase (far above the 5 s limit).
 
-## 5. Live-capture status (2026-10-31)
-Written, not yet run on hardware: TC-01 (device list), TC-02 (capture), TC-05 (two voices -> Speaker 1/2). Only wiring was checked with stand-in models and wav files: mic file -> `Me`, system file -> `Speaker N`, both sources concurrently.
+## 5. Full pipeline in Colab, T4 GPU (2026-10-31)
+Run: `--mic-input clip_1.wav --input test_audio.hy.wav` (wav files stand in for live devices; no real microphone or loopback tested).
+- Mic phrase labelled `Me`; system phrases `Speaker 1..4`. Armenian and English both good.
+- Latency after end of speech: first three phrases 8.2 s, 10.4 s, 5.6 s (cold start + queue behind it); remaining phrases 1.96-3.62 s. Fix: model warm-up before listening (added, not re-measured).
+- Clip 6 was split mid-sentence by the 0.6 s end-of-phrase silence; the second half got its own speaker. Fix: `--end-silence`, default 0.8 s (not re-measured).
+- Speaker labels: 8 clips -> 4 labels, five phrases merged into `Speaker 3`. Ground truth (who spoke which clip) unknown; tune `--speaker-threshold`.
+- fp16 on CUDA added to the ASR model afterwards; not re-measured.
+
+## 6. Still untested
+Real microphone capture, real loopback capture (BlackHole / Stereo Mix), CPU latency on a modern laptop, speaker separation on a real conversation.

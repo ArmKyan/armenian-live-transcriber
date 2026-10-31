@@ -8,6 +8,8 @@ import queue
 import threading
 import time
 
+import numpy as np
+
 from audio import list_devices, stream_device, stream_wav
 from segment import Segmenter
 from transcribe import DEFAULT_MODEL as ASR_MODEL
@@ -23,10 +25,10 @@ def fmt_ts(seconds: float) -> str:
     return f"{s // 3600:02d}:{s % 3600 // 60:02d}:{s % 60:02d}"
 
 
-def pump(name, blocks, silence_rms, jobs):
+def pump(name, blocks, silence_rms, end_silence_s, jobs):
     """Capture thread: segment one source into phrases. Errors are passed to the main thread."""
     try:
-        seg = Segmenter(silence_rms=silence_rms)
+        seg = Segmenter(silence_rms=silence_rms, end_silence_s=end_silence_s)
         for block in blocks:
             result = seg.feed(block)
             if result:
@@ -62,10 +64,17 @@ def run(args) -> None:
 
         tracker = SpeakerTracker(args.speaker_threshold)
 
+    # Warm up all models so the first real phrase isn't slow (GPU kernels, caches).
+    noise = (np.random.randn(32_000) * 0.05).astype("float32")
+    asr.transcribe(noise)
+    mt.translate("Բարև")
+    if tracker:
+        tracker.warm_up(noise)
+
     t_session = time.monotonic()
     jobs: queue.Queue = queue.Queue()
     for name, blocks in sources:
-        threading.Thread(target=pump, args=(name, blocks, args.silence_rms, jobs), daemon=True).start()
+        threading.Thread(target=pump, args=(name, blocks, args.silence_rms, args.end_silence, jobs), daemon=True).start()
     print("Listening... (Ctrl+C to stop)", flush=True)
 
     finished = 0
@@ -105,6 +114,7 @@ if __name__ == "__main__":
     p.add_argument("--asr-model", default=ASR_MODEL)
     p.add_argument("--mt-model", default=MT_MODEL)
     p.add_argument("--silence-rms", type=float, default=0.01, help="block RMS below this is silence")
+    p.add_argument("--end-silence", type=float, default=0.8, help="seconds of silence that end a phrase")
     p.add_argument("--speaker-threshold", type=float, default=0.45, help="cosine similarity to match a known speaker")
     p.add_argument("--no-diarize", action="store_true", help="label all system audio 'Speaker 1'")
     args = p.parse_args()

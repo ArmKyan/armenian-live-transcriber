@@ -26,6 +26,10 @@ class SpeakerTracker:
         e = e.squeeze().cpu().numpy()
         return e / np.linalg.norm(e)
 
+    def warm_up(self, audio: np.ndarray) -> None:
+        """Run the encoder once without registering a speaker."""
+        self._embed(audio)
+
     def identify(self, audio: np.ndarray) -> str:
         emb = self._embed(audio)
         if not self.centroids:

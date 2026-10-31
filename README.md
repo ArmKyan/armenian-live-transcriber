@@ -35,7 +35,7 @@ Testing without hardware (wav files must be 16 kHz):
 ```bash
 python src/main.py --input test_audio.hy.wav              # file as system audio
 python src/main.py --mic-input me.wav --input others.wav  # both sources
-# --fast skips real-time pacing, --no-diarize skips speaker model, --speaker-threshold, --silence-rms
+# --fast skips real-time pacing, --no-diarize skips speaker model, --speaker-threshold, --silence-rms, --end-silence
 ```
 Output: `[HH:MM:SS] Me | Speaker N`, then `HY:` and `EN:` lines and the latency after end of speech. On Windows set `$env:PYTHONUTF8="1"` and use a console font with Armenian glyphs (or redirect to a UTF-8 file).
 
@@ -52,8 +52,8 @@ loopback device -> capture thread -> Segmenter --/                       (Me / S
 - **Translation: `facebook/nllb-200-distilled-1.3B`.** `opus-mt-hy-en` gave fluent but wrong English with a religious-text bias; NLLB-600M was better, 1.3B best.
 
 ## Honest status and limitations
-- **The live parts are written but UNTESTED on real hardware**: device capture (`stream_device`), the loopback setup, speaker identification and the 0.45 speaker threshold were only wiring-tested with stand-in models and wav files. Expect to tune.
-- **Latency under 5 s is not yet demonstrated.** The ASR model is 0.8B parameters and likely needs a GPU or fast modern CPU. A 2009 Core 2 Duo took 100-300 s per phrase with stock Whisper. Latency printed is measured from the end of speech to the printed line and includes the 0.6 s end-of-phrase silence wait.
+- **Tested only with wav files, in Colab on a T4 GPU**: the whole pipeline (two sources, `Me`/`Speaker N` labels, Armenian ASR, English MT) ran end to end. **Not tested:** real microphone capture, real loopback capture, and speaker separation on a real conversation. The 0.45 speaker threshold is a guess; tune with `--speaker-threshold`.
+- **Latency:** on a Colab T4 GPU, phrases took 2-3.6 s after the end of speech (first phrases were slower before warm-up was added). **CPU latency is not measured**; the ASR model is 0.8B parameters and likely needs a GPU or a fast modern CPU. A 2009 Core 2 Duo took 100-300 s per phrase with stock Whisper. Latency printed is measured from the end of speech to the printed line and includes the 0.6 s end-of-phrase silence wait.
 - Models were checked by eye on 8 Common Voice clips, not as WER; real calls will be harder.
 - One worker processes phrases in order; if it falls behind, latency grows silently.
 - Speaker labels are per phrase (no mid-phrase changes), rely on a fixed threshold, and fail on overlapping speech.
