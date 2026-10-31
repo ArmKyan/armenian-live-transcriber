@@ -32,7 +32,7 @@
 - **Context**: Tell apart several people on the system-audio channel, locally, with stable labels for the session.
 - **Decision**: Online identification, not full diarization: each finished phrase is embedded with SpeechBrain ECAPA-TDNN (`speechbrain/spkrec-ecapa-voxceleb`, CPU) and matched by cosine similarity to running speaker centroids; below threshold (default 0.45, `--speaker-threshold`) it becomes a new speaker. Phrases under 1 s never create or update a speaker.
 - **Rationale**: Simple, no heavy pyannote pipeline, one embedding per phrase fits the latency budget. Microphone audio is always `Me` and is never embedded.
-- **Trade-offs**: First test (Colab, 8 Common Voice clips as one system source): plausible but unverified labels; five phrases merged into one speaker. The 0.45 threshold is still a guess and needs tuning on a real conversation. Overlapping speech, very short phrases and similar voices will mislabel. One phrase = one speaker (no mid-phrase speaker change).
+- **Trade-offs**: Colab test with 8 Common Voice clips (3 distinct speakers, ground truth known): labels matched at threshold 0.45 after phrase splitting was fixed. Only one small test; similar voices, overlap and real calls are untested, so the threshold may need tuning. Overlapping speech, very short phrases and similar voices will mislabel. One phrase = one speaker (no mid-phrase speaker change).
 
 ---
 

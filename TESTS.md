@@ -48,12 +48,11 @@
 Latency on the target laptop: **not yet measured** with the final models. On a 2009 Core 2 Duo the earlier stock-Whisper runs took ~100-300 s per phrase (far above the 5 s limit).
 
 ## 5. Full pipeline in Colab, T4 GPU (2026-10-31)
-Run: `--mic-input clip_1.wav --input test_audio.hy.wav` (wav files stand in for live devices; no real microphone or loopback tested).
-- Mic phrase labelled `Me`; system phrases `Speaker 1..4`. Armenian and English both good.
-- Latency after end of speech: first three phrases 8.2 s, 10.4 s, 5.6 s (cold start + queue behind it); remaining phrases 1.96-3.62 s. Fix: model warm-up before listening (added, not re-measured).
-- Clip 6 was split mid-sentence by the 0.6 s end-of-phrase silence; the second half got its own speaker. Fix: `--end-silence`, default 0.8 s (not re-measured).
-- Speaker labels: 8 clips -> 4 labels, five phrases merged into `Speaker 3`. Ground truth (who spoke which clip) unknown; tune `--speaker-threshold`.
-- fp16 on CUDA added to the ASR model afterwards; not re-measured.
+Command: `--mic-input clip_1.wav --input test_audio.hy.wav` (wav files stand in for live devices; no real microphone or loopback tested). 8 Common Voice clips, 3 distinct speakers (clip 1; clip 2; clips 3-8 are one person, confirmed by listening).
+
+**Run 1** (before fixes): first three phrases 8.2 s, 10.4 s, 5.6 s (cold start + queue); the rest 2.0-3.6 s. Clip 6 split mid-sentence by the 0.6 s end-of-phrase silence, second half got its own speaker. Five phrases merged into `Speaker 3`.
+
+**Run 2** (warm-up, `--end-silence 0.8`, fp16 on CUDA): all phrases 2.0-2.8 s after end of speech, except 4.1 s for the first system phrase, which queued behind the `Me` phrase that ended at the same moment. Clip 6 stayed one phrase. Labels: mic -> `Me`; clip 1 -> Speaker 1; clip 2 -> Speaker 2; clips 3-8 -> Speaker 3 (matches ground truth). Armenian and English both good.
 
 ## 6. Still untested
-Real microphone capture, real loopback capture (BlackHole / Stereo Mix), CPU latency on a modern laptop, speaker separation on a real conversation.
+Real microphone capture, real loopback capture (BlackHole / Stereo Mix), CPU-only latency on a modern laptop, speaker separation on a real conversation with overlap or similar voices. One worker handles phrases in order, so two people finishing together queue.
